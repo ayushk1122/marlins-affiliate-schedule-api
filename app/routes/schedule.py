@@ -1,10 +1,14 @@
 from fastapi import APIRouter, Query
 from typing import Optional
+from app.utils.date_utils import parse_date
 
 router = APIRouter()
 
 @router.get("/schedule")
 async def get_schedule(date: Optional[str] = Query(None, description="Date in YYYY-MM-DD format")):
+    parsed = parse_date(date)
+    print(f"Parsed date: {parsed}")
+    
     # Temporary dummy data
     return {
         "146": {
