@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Query
 from typing import Optional
 from app.utils.date_utils import parse_date
+from app.services.mlb_api import get_affiliates
 
 router = APIRouter()
 
@@ -8,6 +9,9 @@ router = APIRouter()
 async def get_schedule(date: Optional[str] = Query(None, description="Date in YYYY-MM-DD format")):
     parsed = parse_date(date)
     print(f"Parsed date: {parsed}")
+    
+    affiliates = await get_affiliates()
+    print(f"Found {len(affiliates)} affiliates")
     
     # Temporary dummy data
     return {
