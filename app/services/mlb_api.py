@@ -1,6 +1,6 @@
 import httpx
 from app.config import BASE_URL, MARLINS_TEAM_ID
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 async def get_affiliates() -> List[Dict[str, Any]]:
     """
@@ -25,4 +25,32 @@ async def get_schedule_for_teams(team_ids: List[int], sport_ids: List[int], date
     async with httpx.AsyncClient() as client:
         response = await client.get(url)
         response.raise_for_status()
-        return response.json().get("dates", []) 
+        return response.json().get("dates", [])
+
+async def get_live_game_data(game_pk: int) -> Optional[Dict[str, Any]]:
+    """
+    Fetch live game data for a specific game.
+    """
+    url = f"{BASE_URL}/game/{game_pk}/feed/live"
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.get(url)
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPStatusError:
+            # Game might not have live data available
+            return None
+
+async def get_game_boxscore(game_pk: int) -> Optional[Dict[str, Any]]:
+    """
+    Fetch boxscore data for a specific game (includes probable pitchers, final stats).
+    """
+    url = f"{BASE_URL}/game/{game_pk}/boxscore"
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.get(url)
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPStatusError:
+            # Boxscore might not be available
+            return None 

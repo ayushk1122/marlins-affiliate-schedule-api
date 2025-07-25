@@ -2,7 +2,7 @@ from fastapi import APIRouter, Query, HTTPException
 from typing import Optional
 from app.utils.date_utils import parse_date
 from app.services.mlb_api import get_affiliates, get_schedule_for_teams
-from app.services.formatter import format_schedule
+from app.services.formatter import format_schedule_with_details
 from app.models.game_response import ScheduleResponse
 
 router = APIRouter()
@@ -28,6 +28,6 @@ async def get_schedule(date: Optional[str] = Query(None, description="Date in YY
     # Step 3: Fetch schedule
     schedule_data = await get_schedule_for_teams(team_ids, sport_ids, date_str)
 
-    # Step 4: Format the response
-    formatted = format_schedule(affiliates, schedule_data)
+    # Step 4: Format the response with detailed game data
+    formatted = await format_schedule_with_details(affiliates, schedule_data)
     return formatted 
