@@ -1,5 +1,64 @@
 from typing import List, Dict, Any, Union
-from app.services.mlb_api import get_live_game_data, get_game_boxscore, get_live_feed_data
+from app.services.mlb_api import get_live_game_data, get_game_boxscore, get_live_feed_data, get_game_plays
+
+def analyze_recent_plays_for_runners(plays_data: Dict[str, Any], current_inning: int, current_outs: int) -> List[str]:
+    """
+    Analyze recent plays to determine who's currently on base.
+    """
+    runners_on_base = []
+    
+    if not plays_data or "plays" not in plays_data:
+        return runners_on_base
+    
+    plays = plays_data.get("plays", [])
+    if not plays:
+        return runners_on_base
+    
+    # Track base runners through recent plays
+    current_runners = {"1B": None, "2B": None, "3B": None}
+    
+    # Look at plays from the current inning
+    for play in reversed(plays):  # Start from most recent
+        play_data = play.get("playEvents", [])
+        inning = play.get("about", {}).get("inning", 0)
+        
+        # Only look at current inning plays
+        if inning != current_inning:
+            continue
+            
+        for event in play_data:
+            event_type = event.get("details", {}).get("type", {})
+            event_code = event_type.get("code", "")
+            
+            # Track base running events
+            if "runner" in event:
+                runner_data = event["runner"]
+                runner_name = runner_data.get("details", {}).get("runner", {}).get("fullName", "")
+                movement = runner_data.get("movement", {})
+                start_base = movement.get("start", "")
+                end_base = movement.get("end", "")
+                
+                # Update current runners based on movement
+                if start_base == "1B" and end_base != "1B":
+                    current_runners["1B"] = None
+                if start_base == "2B" and end_base != "2B":
+                    current_runners["2B"] = None
+                if start_base == "3B" and end_base != "3B":
+                    current_runners["3B"] = None
+                    
+                if end_base == "1B":
+                    current_runners["1B"] = runner_name
+                elif end_base == "2B":
+                    current_runners["2B"] = runner_name
+                elif end_base == "3B":
+                    current_runners["3B"] = runner_name
+    
+    # Convert current runners to base positions
+    for base, runner in current_runners.items():
+        if runner:
+            runners_on_base.append(base)
+    
+    return sorted(runners_on_base)
 
 def format_schedule(affiliates: List[Dict[str, Any]], schedule_data: List[Dict[str, Any]]) -> Dict[int, dict]:
     # Level mapping
@@ -93,7 +152,7 @@ def format_schedule(affiliates: List[Dict[str, Any]], schedule_data: List[Dict[s
                     "away": game["teams"]["away"].get("score", 0)
                 },
                 "inning": "N/A",
-                "outs": "N/A",
+                "outs": "0",
                 "runners_on_base": [],
                 "current_pitcher": "N/A",
                 "batter": "N/A"
@@ -277,6 +336,10 @@ async def format_schedule_with_details(affiliates: List[Dict[str, Any]], schedul
             # Also get boxscore data (for historical info and current players)
             boxscore_data = await get_game_boxscore(game_pk)
             print(f"Boxscore data result for game {game_pk}: {bool(boxscore_data)}")
+            
+            # Get plays data for base runner analysis
+            plays_data = await get_game_plays(game_pk)
+            print(f"Plays data result for game {game_pk}: {bool(plays_data)}")
 
             # Process live feed data for current game state
             if live_feed_data:
@@ -285,57 +348,64 @@ async def format_schedule_with_details(affiliates: List[Dict[str, Any]], schedul
                 # Extract current game state from live feed
                 live_data = live_feed_data.get("liveData", {})
                 if live_data:
-                    # Get current inning and outs from live data
-                    plays = live_data.get("plays", {})
-                    current_play = plays.get("currentPlay", {})
+                    # Get current inning, outs, and offense from linescore
+                    linescore = live_data.get("linescore", {})
+                    if linescore:
+                        current_inning = linescore.get("currentInning", "N/A")
+                        inning_half = linescore.get("inningHalf", "N/A")
+                        outs = linescore.get("outs", "N/A")
+                        
+                        if current_inning and inning_half:
+                            details["inning"] = f"{inning_half} {current_inning}"
+                            print(f"    Live feed inning: {details['inning']}")
+                        
+                        if outs != "N/A":
+                            details["outs"] = str(outs)
+                            print(f"    Live feed outs: {details['outs']}")
                     
-                    # Try to get inning info
-                    if "inning" in current_play:
-                        inning_info = current_play["inning"]
-                        if isinstance(inning_info, dict):
-                            inning_num = inning_info.get("number", "N/A")
-                            inning_half = inning_info.get("half", "N/A")
-                            if inning_half and inning_num:
-                                details["inning"] = f"{inning_half.title()} {inning_num}"
+                    # Get current batter and runners from offense
+                    offense = linescore.get("offense", {})
+                    if offense:
+                        # Get current batter
+                        batter_info = offense.get("batter", {})
+                        if isinstance(batter_info, dict) and batter_info.get("fullName"):
+                            details["batter"] = batter_info["fullName"]
+                            print(f"    Live feed batter: {details['batter']}")
+                        
+                        # Get runners on base
+                        runners_on_base = []
+                        on_first = offense.get("first")
+                        on_second = offense.get("second") 
+                        on_third = offense.get("third")
+                        
+                        if on_first and isinstance(on_first, dict) and on_first.get("fullName"):
+                            runners_on_base.append(f"1B: {on_first.get('fullName')}")
+                            print(f"    Found runner on 1B: {on_first.get('fullName')}")
+                        if on_second and isinstance(on_second, dict) and on_second.get("fullName"):
+                            runners_on_base.append(f"2B: {on_second.get('fullName')}")
+                            print(f"    Found runner on 2B: {on_second.get('fullName')}")
+                        if on_third and isinstance(on_third, dict) and on_third.get("fullName"):
+                            runners_on_base.append(f"3B: {on_third.get('fullName')}")
+                            print(f"    Found runner on 3B: {on_third.get('fullName')}")
+                        
+                        details["runners_on_base"] = sorted(runners_on_base)
+                        print(f"    Live feed runners: {details['runners_on_base']}")
                     
-                    # Try to get outs
-                    if "count" in current_play:
-                        count = current_play["count"]
-                        if isinstance(count, dict):
-                            details["outs"] = str(count.get("outs", "N/A"))
-                    
-                    # Try to get runners on base
-                    if "runners" in current_play:
-                        runners = current_play["runners"]
-                        if isinstance(runners, list):
-                            runners_on_base = []
-                            for runner in runners:
-                                base = runner.get("details", {}).get("base", {})
-                                if base and base.get("number"):
-                                    base_num = base["number"]
-                                    if base_num == 1:
-                                        runners_on_base.append("1B")
-                                    elif base_num == 2:
-                                        runners_on_base.append("2B")
-                                    elif base_num == 3:
-                                        runners_on_base.append("3B")
-                            details["runners_on_base"] = sorted(list(set(runners_on_base)))
+                    # Get current pitcher from defense
+                    defense = linescore.get("defense", {})
+                    if defense:
+                        pitcher_info = defense.get("pitcher", {})
+                        if isinstance(pitcher_info, dict) and pitcher_info.get("fullName"):
+                            details["current_pitcher"] = pitcher_info["fullName"]
+                            print(f"    Live feed pitcher: {details['current_pitcher']}")
             
-            # Process boxscore data for current players and historical info
-            if boxscore_data:
+            # Process boxscore data as fallback (only for pitcher/batter if live feed didn't provide them)
+            if boxscore_data and (details["current_pitcher"] == "N/A" or details["batter"] == "N/A"):
                 print(f"Boxscore data keys: {list(boxscore_data.keys())}")
 
                 # Check if this is boxscore data (which has different structure)
                 if "teams" in boxscore_data and "info" in boxscore_data:
                     print("Processing boxscore data for live game...")
-                    
-                    # Get current inning from info
-                    info = boxscore_data.get("info", [])
-                    for item in info:
-                        if item.get("label") == "Inning":
-                            details["inning"] = item.get("value", "N/A")
-                        elif item.get("label") == "Outs":
-                            details["outs"] = item.get("value", "N/A")
                     
                     # Get current pitcher and batter from teams data
                     teams = boxscore_data.get("teams", {})
@@ -358,6 +428,8 @@ async def format_schedule_with_details(affiliates: List[Dict[str, Any]], schedul
                                 if pitcher_stats:
                                     # Get innings pitched (e.g., "2.2" means 2 innings + 2 outs = 8 outs total)
                                     innings_pitched = pitcher_stats.get("inningsPitched", "0.0")
+                                    
+                                    # Check if this pitcher has pitched any innings
                                     if innings_pitched and innings_pitched != "0.0":
                                         try:
                                             # Parse innings like "2.2" (2 innings, 2 outs)
@@ -378,8 +450,92 @@ async def format_schedule_with_details(affiliates: List[Dict[str, Any]], schedul
                                                 details["inning"] = f"{inning_half} {total_innings + 1}"
                                             
                                             print(f"    Extracted from pitcher stats: Inning {details['inning']}, Outs {details['outs']}")
+                                            
                                         except (ValueError, TypeError) as e:
                                             print(f"    Error parsing pitcher stats: {e}")
+                                    else:
+                                        # New pitcher with no innings pitched - need to get inning from other sources
+                                        print(f"    New pitcher detected (0.0 IP) - getting inning from game status")
+                                        
+                                        # Try to get inning from game status detailed state
+                                        game_status_detailed = game_status.get("detailedState", "")
+                                        if game_status_detailed:
+                                            # Look for inning info in detailed state like "Bottom 5th" or "Top 3rd"
+                                            import re
+                                            inning_match = re.search(r'(top|bottom)\s*(\d+)(?:st|nd|rd|th)?', game_status_detailed.lower())
+                                            if inning_match:
+                                                inning_half = inning_match.group(1).title()
+                                                inning_num = inning_match.group(2)
+                                                details["inning"] = f"{inning_half} {inning_num}"
+                                                print(f"    Extracted from game status: {details['inning']}")
+                                            
+                                            # Try to get outs from detailed state
+                                            outs_match = re.search(r'(\d+)\s*out', game_status_detailed.lower())
+                                            if outs_match:
+                                                details["outs"] = outs_match.group(1)
+                                                print(f"    Extracted outs from game status: {details['outs']}")
+                                        
+                                        # If still no inning info, try to get from current pitcher's total outs
+                                        if details["inning"] == "N/A":
+                                            # Calculate inning from current pitcher's total outs
+                                            total_outs_pitched = pitcher_stats.get("outs", 0)
+                                            if total_outs_pitched > 0:
+                                                # Calculate completed innings from total outs
+                                                completed_innings = total_outs_pitched // 3
+                                                current_inning = completed_innings + 1
+                                                
+                                                # Determine which team is batting based on current batter
+                                                if team_side == "away":
+                                                    # Away team batting = Top of inning
+                                                    inning_half = "Top"
+                                                else:
+                                                    # Home team batting = Bottom of inning
+                                                    inning_half = "Bottom"
+                                                
+                                                details["inning"] = f"{inning_half} {current_inning}"
+                                                print(f"    Calculated inning from pitcher total outs: {details['inning']} (Pitcher outs: {total_outs_pitched})")
+                                        
+                                        # If still no inning info, try to get from team stats using total outs
+                                        if details["inning"] == "N/A":
+                                            # Look at team stats to determine current inning from total outs
+                                            home_team_stats = boxscore_data.get("teams", {}).get("home", {}).get("teamStats", {})
+                                            away_team_stats = boxscore_data.get("teams", {}).get("away", {}).get("teamStats", {})
+                                            
+                                            if home_team_stats and away_team_stats:
+                                                # Get total outs for each team
+                                                home_outs = home_team_stats.get("batting", {}).get("leftOnBase", 0)  # This might not be total outs
+                                                away_outs = away_team_stats.get("batting", {}).get("leftOnBase", 0)
+                                                
+                                                # Try to get outs from pitching stats (outs recorded by opposing pitchers)
+                                                home_pitching_outs = home_team_stats.get("pitching", {}).get("outs", 0)
+                                                away_pitching_outs = away_team_stats.get("pitching", {}).get("outs", 0)
+                                                
+                                                # Calculate inning from total outs (27 outs per 9 innings)
+                                                total_outs = home_pitching_outs + away_pitching_outs
+                                                completed_innings = total_outs // 3  # 3 outs per inning
+                                                
+                                                # Determine which team is batting based on current batter
+                                                if team_side == "away":
+                                                    # Away team batting = Top of inning
+                                                    inning_half = "Top"
+                                                    current_inning = completed_innings + 1
+                                                else:
+                                                    # Home team batting = Bottom of inning
+                                                    inning_half = "Bottom"
+                                                    current_inning = completed_innings + 1
+                                                
+                                                details["inning"] = f"{inning_half} {current_inning}"
+                                                print(f"    Calculated inning from total outs: {details['inning']} (Total outs: {total_outs})")
+                                
+                                # Try to determine runners on base from pitcher's recent performance
+                                if pitcher_stats:
+                                    hits = pitcher_stats.get("hits", 0)
+                                    base_on_balls = pitcher_stats.get("baseOnBalls", 0)
+                                    hit_by_pitch = pitcher_stats.get("hitBatsmen", 0)
+                                    batters_faced = pitcher_stats.get("battersFaced", 0)
+                                    
+                                    if batters_faced > 0:
+                                        print(f"    Pitcher stats: {hits} hits, {base_on_balls} walks, {hit_by_pitch} HBP, {batters_faced} batters faced")
                             
                             # Check if this is the current batter
                             if game_status.get("isCurrentBatter", False):
@@ -398,9 +554,30 @@ async def format_schedule_with_details(affiliates: List[Dict[str, Any]], schedul
                                         details["inning"] = details["inning"].replace("Top", "Bottom")
                                         print(f"    Corrected inning: {details['inning']} (home team batting)")
                     
-                    # Extract runners on base from info array (if not already set by live feed)
+                    # Extract runners on base from plays analysis (if not already set by live feed)
+                    if not details["runners_on_base"] and plays_data:
+                        # Extract current inning number from the inning string
+                        current_inning_str = details["inning"]
+                        current_inning = 1  # Default
+                        try:
+                            # Extract number from "Top 5" or "Bottom 3"
+                            import re
+                            inning_match = re.search(r'(\d+)', current_inning_str)
+                            if inning_match:
+                                current_inning = int(inning_match.group(1))
+                        except (ValueError, TypeError):
+                            current_inning = 1
+                        
+                        # Analyze recent plays for current base runners
+                        runners_on_base = analyze_recent_plays_for_runners(plays_data, current_inning, int(details["outs"]))
+                        details["runners_on_base"] = runners_on_base
+                        print(f"    Analyzed plays for runners: {runners_on_base}")
+                    
+                    # Fallback to info array if plays analysis didn't work
                     if not details["runners_on_base"]:
                         runners_on_base = []
+                        
+                        # First, try to get runners from "Runners left in scoring position" info
                         for item in info:
                             label = item.get("label", "")
                             value = item.get("value", "")
@@ -430,9 +607,45 @@ async def format_schedule_with_details(affiliates: List[Dict[str, Any]], schedul
                                 if "3" in value:
                                     runners_on_base.append("3B")
                         
+                        # If no runners found from info, try to determine from recent plays
+                        if not runners_on_base:
+                            # Look for recent base-running events in the info array
+                            for item in info:
+                                label = item.get("label", "")
+                                value = item.get("value", "")
+                                
+                                # Look for stolen bases, doubles, triples, etc.
+                                if "SB" in label and value:
+                                    # Stolen base indicates runner on 2B or 3B
+                                    if "2nd" in value or "2B" in value:
+                                        runners_on_base.append("2B")
+                                    elif "3rd" in value or "3B" in value:
+                                        runners_on_base.append("3B")
+                                
+                                # Look for doubles and triples
+                                elif "2B" in label and value and value != "None":
+                                    # Double indicates runner on 2B
+                                    runners_on_base.append("2B")
+                                
+                                elif "3B" in label and value and value != "None":
+                                    # Triple indicates runner on 3B
+                                    runners_on_base.append("3B")
+                                
+                                # Look for recent hits that might indicate runners
+                                elif "TB" in label and value:
+                                    # Total bases - look for recent hits
+                                    if "2" in value:  # Double
+                                        runners_on_base.append("2B")
+                                    elif "3" in value:  # Triple
+                                        runners_on_base.append("3B")
+                                    elif "1" in value and "2" not in value and "3" not in value:  # Single
+                                        runners_on_base.append("1B")
+                        
                         # Remove duplicates and sort
                         runners_on_base = sorted(list(set(runners_on_base)))
                         details["runners_on_base"] = runners_on_base
+                        
+                        print(f"    Extracted runners from info: {runners_on_base}")
                     
                     # If we still don't have proper inning info, try to get it from the game status
                     if details["inning"] == "N/A" or details["inning"] == "In Progress":

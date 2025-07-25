@@ -1,5 +1,5 @@
 import httpx
-from app.config import BASE_URL, MARLINS_TEAM_ID
+from app.config import BASE_URL, LIVE_FEED_BASE_URL, MARLINS_TEAM_ID
 from typing import List, Dict, Any, Optional
 
 async def get_affiliates() -> List[Dict[str, Any]]:
@@ -66,15 +66,23 @@ async def get_live_game_data(game_pk: int) -> Optional[Dict[str, Any]]:
 async def get_live_feed_data(game_pk: int) -> Optional[Dict[str, Any]]:
     """
     Fetch live feed data specifically for current game state (inning, outs, runners).
+    Uses v1.1 API for live feed data.
     """
-    url = f"{BASE_URL}/game/{game_pk}/feed/live"
+    url = f"{LIVE_FEED_BASE_URL}/game/{game_pk}/feed/live"
+    print(f"  Trying live feed URL: {url}")
     async with httpx.AsyncClient() as client:
         try:
             response = await client.get(url)
+            print(f"  Live feed response status: {response.status_code}")
             response.raise_for_status()
-            return response.json()
-        except httpx.HTTPStatusError:
-            print(f"  Live feed endpoint failed for game {game_pk}")
+            data = response.json()
+            print(f"  Live feed data keys: {list(data.keys()) if data else 'None'}")
+            return data
+        except httpx.HTTPStatusError as e:
+            print(f"  Live feed HTTP Error: {e.response.status_code} - {e.response.text[:200]}")
+            return None
+        except Exception as e:
+            print(f"  Live feed other error: {type(e).__name__}: {str(e)}")
             return None
 
 async def get_game_boxscore(game_pk: int) -> Optional[Dict[str, Any]]:
@@ -89,4 +97,18 @@ async def get_game_boxscore(game_pk: int) -> Optional[Dict[str, Any]]:
             return response.json()
         except httpx.HTTPStatusError:
             # Boxscore might not be available
+            return None
+
+async def get_game_plays(game_pk: int) -> Optional[Dict[str, Any]]:
+    """
+    Fetch recent plays/events for a specific game to determine current base runners.
+    """
+    url = f"{BASE_URL}/game/{game_pk}/plays"
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.get(url)
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPStatusError:
+            print(f"  Plays endpoint failed for game {game_pk}")
             return None 
