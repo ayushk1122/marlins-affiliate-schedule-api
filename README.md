@@ -2,7 +2,7 @@
 
 A FastAPI-based web service that provides real-time schedules and live game data for the Miami Marlins (and any other MLB team) and their minor league affiliates. The API fetches data from MLB's official API and provides enhanced formatting with live game state information.
 
-## 🏟️ Features
+## Features
 
 - **Real-time Schedule Data**: Get daily schedules for all Marlins/MLB team affiliates
 - **Live Game State**: Current inning, outs, runners on base, pitcher, and batter for games in progress
@@ -10,7 +10,7 @@ A FastAPI-based web service that provides real-time schedules and live game data
 - **Enhanced Data Formatting**: Clean, structured responses with detailed game information
 - **Dual API Integration**: Uses MLB API v1 for historical data and v1.1 for live feed data
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
 
@@ -62,7 +62,7 @@ A FastAPI-based web service that provides real-time schedules and live game data
    - Schedule Endpoint: http://localhost:8000/schedule
    - Health Check: http://localhost:8000/
 
-## 📋 API Endpoints
+## API Endpoints
 
 ### GET `/schedule`
 Retrieves the schedule for all Marlins/MLB team affiliates for a specific date.
@@ -103,7 +103,7 @@ curl "http://localhost:8000/schedule?date=2025-07-25"
 }
 ```
 
-## 🏗️ Project Structure
+## Project Structure
 
 ```
 marlins-affiliate-schedule-api/
@@ -146,7 +146,7 @@ LIVE_FEED_BASE_URL = "https://statsapi.mlb.com/api/v1.1"  # For live game data
 MLB_SPORT_ID = 1  # Baseball sport ID
 ```
 
-## 🔧 Key Components
+## Key Components
 
 ### Core Technologies
 - **FastAPI**: Modern, fast web framework for building APIs
