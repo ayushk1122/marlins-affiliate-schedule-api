@@ -1,4 +1,4 @@
-# Marlins Affiliate Schedule API
+# Marlins/MLB Team Affiliate Schedule API
 
 A FastAPI-based web service that provides real-time schedules and live game data for the Miami Marlins (and any other MLB team) and their minor league affiliates. The API fetches data from MLB's official API and provides enhanced formatting with live game state information.
 
@@ -58,11 +58,30 @@ A FastAPI-based web service that provides real-time schedules and live game data
    ```
 
 6. **Access the API**
-   - API Documentation: http://localhost:8000/docs
+   - **Interactive API Documentation**: http://localhost:8000/docs (Swagger UI)
    - Schedule Endpoint: http://localhost:8000/schedule
    - Health Check: http://localhost:8000/
 
 ## API Endpoints
+
+### Interactive API Documentation (Swagger UI)
+The easiest way to test the API is through the interactive Swagger UI:
+
+1. **Open your browser** and go to: http://localhost:8000/docs
+2. **Find the `/schedule` endpoint** in the documentation
+3. **Click "Try it out"** to make interactive requests
+4. **Enter a date** (optional) in YYYY-MM-DD format:
+   - **Leave empty**: Uses today's date
+   - **Example**: `2025-07-25` for July 25, 2025
+   - **Format**: Must be YYYY-MM-DD (e.g., `2025-12-31`)
+5. **Click "Execute"** to see the response
+
+**Features of Swagger UI:**
+- ✅ **Interactive testing**: No need for curl or Postman
+- ✅ **Parameter validation**: Automatic date format checking
+- ✅ **Response preview**: See formatted JSON responses
+- ✅ **Schema documentation**: Understand the response structure
+- ✅ **Try different dates**: Easy to test various scenarios
 
 ### GET `/schedule`
 Retrieves the schedule for all Marlins/MLB team affiliates for a specific date.
