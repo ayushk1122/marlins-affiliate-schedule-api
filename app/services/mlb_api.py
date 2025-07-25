@@ -38,30 +38,44 @@ async def get_live_game_data(game_pk: int) -> Optional[Dict[str, Any]]:
         f"{BASE_URL}/game/{game_pk}/feed",
         f"{BASE_URL}/game/{game_pk}/boxscore"  # Boxscore often has current game state
     ]
-    
+
     async with httpx.AsyncClient() as client:
         for url in endpoints:
             print(f"  Trying endpoint: {url}")
             try:
                 response = await client.get(url)
                 print(f"  Response status: {response.status_code}")
-                
+
                 if response.status_code == 200:
                     data = response.json()
                     print(f"  Success! Data keys: {list(data.keys()) if data else 'None'}")
                     return data
                 else:
                     print(f"  Failed with status: {response.status_code}")
-                    
+
             except httpx.HTTPStatusError as e:
                 print(f"  HTTP Error: {e.response.status_code} - {e.response.text[:100]}")
                 continue
             except Exception as e:
                 print(f"  Other error: {type(e).__name__}: {str(e)}")
                 continue
-    
+
     print(f"  All endpoints failed for game {game_pk}")
     return None
+
+async def get_live_feed_data(game_pk: int) -> Optional[Dict[str, Any]]:
+    """
+    Fetch live feed data specifically for current game state (inning, outs, runners).
+    """
+    url = f"{BASE_URL}/game/{game_pk}/feed/live"
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.get(url)
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPStatusError:
+            print(f"  Live feed endpoint failed for game {game_pk}")
+            return None
 
 async def get_game_boxscore(game_pk: int) -> Optional[Dict[str, Any]]:
     """
