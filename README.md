@@ -177,7 +177,7 @@ The project integrates with MLB's official API using two different versions:
 - Handles request validation and response formatting
 - Manages date parsing and error handling
 
-## 🎯 Game State Detection
+## Game State Detection
 
 The API provides different levels of detail based on game status:
 
